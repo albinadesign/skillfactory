@@ -1,75 +1,45 @@
-# krestiki-noliki
+# telegram bot "currency rates"
 
-# define the list of cells:
-cells_list = list(range(1, 10))
+import telebot
+from config import keys, TOKEN
+from extensions import *
 
-# draw the board:
-def draw_board():
-    print("____________________")
-    print("| ", cells_list[0], " | ", cells_list[1], " | ", cells_list[2], " |", "\n"
-          "____________________", "\n"                                                                      
-          "| ", cells_list[3], " | ", cells_list[4], " | ", cells_list[5], " |", "\n"
-          "____________________", "\n"                                                                        
-          "| ", cells_list[6], " | ", cells_list[7], " | ", cells_list[8], " |"
-          )
-    print("--------------------")
 
-# function for input:
-def function_for_input(x_or_o):
-    # input number of the cell, pointing the due player in the request
-    while True:
-        players_choice = input('В какую клетку поставить ' + x_or_o +'? ')
-        # check if input is a number
-        if players_choice not in '123456789':
-            print("Введите номер клетки в диапазоне от 1 до 9 ")
-            continue
-        # check if number is within 1-9
-        if int(players_choice) < 1 or int(players_choice) > 9:
-            print('Выберите номер клетки от 1 до 9')
-            continue
-        # check if the cell is not taken
-        if cells_list[int(players_choice) - 1] == "Х" or cells_list[int(players_choice) - 1] == "О":
-             print('Клетка уже занята. Выберите другую.')
-             continue
-        # if everything is ok redefine the cell as x or o
-        cells_list[int(players_choice) - 1] = x_or_o
-        break
+bot = telebot.TeleBot(TOKEN)
 
-# function for defining the winner:
-def define_the_winner():
-    # define winning combinations:
-    winning_combinations = [(1, 2, 3), (4, 5, 6), (7, 8, 9), (1, 4, 7), (2, 5, 8), (3, 6, 9), (7, 5, 3), (1, 5, 9)]
-     # check if combinations of the cells in cells_list are equal to the winning combinations
-    for cells in winning_combinations:
-        if (cells_list[cells[0]-1]) == (cells_list[cells[1]-1]) == (cells_list[cells[2]-1]):
-            return cells_list[cells[0] - 1]
+
+@bot.message_handler(commands=['start', 'help'])
+def help(message: telebot.types.Message):
+    text = 'Чтобы начать работу, введите команду боту в следующем формате:\n<имя валюты> \
+<в какую валюту перевести> \
+<количество переводимой валюты>\nУвидеть список всех доступных валют: /values'
+    bot.reply_to(message, text)
+
+@bot.message_handler(commands=['values'])
+def values(message: telebot.types.Message):
+    text = 'Доступные валюты: '
+    for key in keys.keys():
+        text = '\n'.join((text, key, ))
+    bot.reply_to(message, text)
+
+@bot.message_handler(content_types=['text', ])
+def convert(message: telebot.types.Message):
+    try:
+        values = message.text.split(' ')
+        quote, base, amount = values
+        total_base = CurrencyConverter.get_price(quote, base, amount)
+        if len(values) != 3:
+            raise APIException('Введите три параметра:\n<имя валюты> \
+                <в какую валюту перевести> \
+                <количество переводимой валюты> ')
+    except APIException as e:
+        bot.reply_to(message, f'Ошибка пользователя.\n{e}')
+    except Exception as e:
+        bot.reply_to(message, f'Не удалось обработать команду. Попробуйте еще раз\n{e}')
     else:
-        return False
 
-# the play
-def the_play():
-    # counter of moves
-    counter = 0
-    while True:
-        draw_board()
-        # define the player - x or y (even or odd number of move) and start function_for_input (x or y)
-        if counter % 2 == 0:
-            function_for_input("Х")
-        else:
-            function_for_input("О")
-        counter += 1
-        # start function for defining the winner, if this function is True print" x, or y, you are the winner" and break
-        if counter > 4:
-            winner = define_the_winner()
-            if winner:
-                draw_board()
-                print('Выиграл', winner, ". Поздравляем!")
-                break
-        # define no more than 9 moves(or more properly 8), if all moves are made print there is no winner and break
-        if counter == 8:
-            draw_board()
-            print("Ничья")
-            break
+        text = f'{quote} в количестве {amount} равен  {total_base * float(amount)} в валюте {base}'
+        bot.send_message(message.chat.id, text)
 
-the_play()
 
+bot.polling()
